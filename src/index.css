@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@300;400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-playfair: "Playfair Display", serif;
+  --font-anek: "Anek Gujarati", sans-serif;
+  
+  --color-lalabapa-red: #8B0000;
+  --color-lalabapa-red-dark: #660000;
+  --color-lalabapa-gold-primary: #D4AF37;
+  --color-lalabapa-gold-light: #FFD700;
+  --color-lalabapa-gold-dark: #B8860B;
+  --color-warm-white: #FDF5E6;
+}
+
+:root {
+  --primary-red: #8B0000;
+  --gold-primary: #D4AF37;
+  --bg-warm: #FDF5E6;
+}
+
+body {
+  @apply font-inter bg-warm-white text-[#1A1A1A] antialiased;
+}
+
+.premium-title {
+  @apply font-playfair tracking-wider;
+}
+
+.gujarati {
+  @apply font-anek;
+}
+
+/* Custom Scrollbar for Premium Feel */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-warm);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-red);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #660000;
+}
+/* Print Layout: SBI Bank Form A4 Support */
+@media print {
+    @page { 
+        size: A4; 
+        margin: 0; 
+    }
+    
+    body { 
+        background: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .no-print { 
+        display: none !important; 
+    }
+
+    .print-only { 
+        display: block !important; 
+    }
+
+    /* Force Grid Borders */
+    .print-grid {
+        display: grid !important;
+        border: 1px solid #ddd !important;
+    }
+    
+    .print-border {
+        border: 1px solid #eee !important;
+    }
+
+    /* Reset Container for Print */
+    .print-container {
+        width: 210mm !important;
+        min-height: 297mm !important;
+        padding: 15mm !important;
+        margin: 0 auto !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        z-index: 9999 !important;
+        background: white !important;
+    }
+}
+
+.print-only {
+    display: none;
+}
+
+/* Glassmorphism Classes */
+.glass {
+  @apply bg-white/10 backdrop-blur-md border border-white/20 shadow-xl;
+}
+
+.glass-red {
+  @apply bg-lalabapa-red/80 backdrop-blur-md border border-white/10 shadow-2xl;
+}

@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Member documents
+    match /members/{memberId} {
+      // Anyone can submit the join form
+      allow create: if true;
+      // Only logged-in admins can view or modify member data
+      allow read, update, delete: if request.auth != null;
+      
+      // Admin notes
+      match /notes/{noteId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    // ID Counter (Used for sequential member IDs)
+    match /counters/{counterId} {
+      allow read, write: if true;
+    }
+
+    // System Configuration (Admin controlled)
+    match /system/{docId} {
+      // Anyone can read (for home page button)
+      allow read: if true;
+      // Only admins can change
+      allow write: if request.auth != null;
+    }
+  }
+}

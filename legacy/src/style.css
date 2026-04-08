@@ -1,0 +1,214 @@
+@import url('https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@300;400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --primary-red: #8B0000;
+  --primary-red-dark: #660000;
+  --gold-primary: #D4AF37;
+  --gold-light: #FFD700;
+  --gold-dark: #B8860B;
+  --bg-warm: #FDF5E6;
+  --text-dark: #1A1A1A;
+  --text-light: #FDF5E6;
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --section-padding: 100px 5%;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-warm);
+  color: var(--text-dark);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, .premium-font {
+  font-family: 'Playfair Display', serif;
+}
+
+.gujarati {
+  font-family: 'Anek Gujarati', sans-serif;
+}
+
+/* Glassmorphism Header */
+header {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 5%;
+  background: rgba(139, 0, 0, 0.85); /* Red theme for the header */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 2px solid var(--gold-primary);
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo-img {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 5px var(--gold-light));
+}
+
+.nav-links {
+  display: flex;
+  gap: 2.5rem;
+  list-style: none;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: var(--text-light);
+  font-weight: 500;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  transition: color 0.3s ease;
+  position: relative;
+}
+
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 1px;
+  bottom: -5px;
+  left: 0;
+  background-color: var(--gold-light);
+  transition: width 0.3s ease;
+}
+
+.nav-links a:hover {
+  color: var(--gold-light);
+}
+
+.nav-links a:hover::after {
+  width: 100%;
+}
+
+/* Hero Section */
+.hero {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, var(--primary-red-dark) 0%, var(--primary-red) 100%);
+  color: var(--text-light);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.4) 100%);
+  pointer-events: none;
+}
+
+.main-coin {
+  width: 320px;
+  height: 320px;
+  object-fit: contain;
+  margin-bottom: 2rem;
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5));
+  animation: float 6s ease-in-out infinite, rotate-slow 20s linear infinite;
+  z-index: 2;
+}
+
+.hero-content {
+  z-index: 2;
+}
+
+.hero-title {
+  font-size: 4rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: 2px;
+  color: var(--gold-light);
+  text-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.hero-subtitle {
+  font-size: 1.8rem;
+  margin-bottom: 2rem;
+  opacity: 0.9;
+}
+
+/* Animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes rotate-slow {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(360deg); }
+}
+
+/* Sections */
+section {
+  padding: var(--section-padding);
+}
+
+.section-title {
+  text-align: center;
+  font-size: 2.5rem;
+  margin-bottom: 3rem;
+  color: var(--primary-red);
+  position: relative;
+}
+
+.section-title::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 3px;
+  background: var(--gold-primary);
+  margin: 1rem auto;
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+}
+
+.about-text p {
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+}
+
+/* Responsive */
+@media (max-width: 968px) {
+  .hero-title { font-size: 2.8rem; }
+  .about-grid { grid-template-columns: 1fr; }
+  .nav-links { display: none; }
+}
