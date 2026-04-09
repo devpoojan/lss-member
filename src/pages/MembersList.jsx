@@ -68,7 +68,7 @@ const MembersList = () => {
     const exportToExcel = () => {
         const worksheet = XLSX.utils.json_to_sheet(members.map((m, index) => ({
             "Sr. No.": index + 1,
-            "Member ID": m.member_id || `LSS-${m.id.substring(0, 5).toUpperCase()}`,
+            "Member ID": m.member_id || `SLB-VDJ-${m.id.substring(0, 5).toUpperCase()}`,
             "Full Name (નામ)": m.main_member,
             "Mobile (મોબાઇલ)": m.contact?.mobile || '—',
             "WhatsApp": m.contact?.whatsapp || '—',
@@ -83,11 +83,13 @@ const MembersList = () => {
             "Pincode (પીનકોડ)": m.address?.pincode || '—',
             "DOB (જન્મ તારીખ)": m.other?.dob || '—',
             "Gender (લિંગ)": m.other?.gender || '—',
-            "Role (હોદ્દો)": m.other?.role || '—',
+            "Society Role (સમાજમાં ભૂમિકા)": m.other?.role || '—',
             "Occupation (વ્યવસાય)": m.occupation || '—',
             "Occupation Detail (વિગત)": m.occupation_detail || '—',
+            "Time Contribution (સમયનું યોગદાન)": m.time_contribution === 'Yes' ? 'હા (Yes)' : m.time_contribution === 'No' ? 'ના (No)' : '—',
+            "Help Society (સમાજને મદદરૂપ)": m.help_society === 'Yes' ? 'હા (Yes)' : m.help_society === 'No' ? 'ના (No)' : '—',
             "Family Members (સભ્યો)": m.family_members_count || '1',
-            "Notes (નોંધ)": m.other?.notes || '—',
+            "Special Notes (ખાસ નોંધ)": m.other?.notes || '—',
             "Consent (સંમતિ)": m.consent ? "YES" : "NO",
             "Submission Date & Time": m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString('en-GB', {
                 day: '2-digit',
@@ -108,7 +110,7 @@ const MembersList = () => {
         const selectedMembers = members.filter(m => selectedIds.includes(m.id));
         const worksheet = XLSX.utils.json_to_sheet(selectedMembers.map((m, index) => ({
             "Sr. No.": index + 1,
-            "Member ID": m.member_id || `LSS-${m.id.substring(0, 5).toUpperCase()}`,
+            "Member ID": m.member_id || `SLB-VDJ-${m.id.substring(0, 5).toUpperCase()}`,
             "Full Name (નામ)": m.main_member,
             "Mobile (મોબાઇલ)": m.contact?.mobile || '—',
             "WhatsApp": m.contact?.whatsapp || '—',
@@ -123,11 +125,13 @@ const MembersList = () => {
             "Pincode (પીનકોડ)": m.address?.pincode || '—',
             "DOB (જન્મ તારીખ)": m.other?.dob || '—',
             "Gender (લિંગ)": m.other?.gender || '—',
-            "Role (હોદ્દો)": m.other?.role || '—',
+            "Society Role (સમાજમાં ભૂમિકા)": m.other?.role || '—',
             "Occupation (વ્યવસાય)": m.occupation || '—',
             "Occupation Detail (વિગત)": m.occupation_detail || '—',
+            "Time Contribution (સમયનું યોગદાન)": m.time_contribution === 'Yes' ? 'હા (Yes)' : m.time_contribution === 'No' ? 'ના (No)' : '—',
+            "Help Society (સમાજને મદદરૂપ)": m.help_society === 'Yes' ? 'હા (Yes)' : m.help_society === 'No' ? 'ના (No)' : '—',
             "Family Members (સભ્યો)": m.family_members_count || '1',
-            "Notes (નોંધ)": m.other?.notes || '—',
+            "Special Notes (ખાસ નોંધ)": m.other?.notes || '—',
             "Consent (સંમતિ)": m.consent ? "YES" : "NO",
             "Submission Date & Time": m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString('en-GB', {
                 day: '2-digit',
@@ -147,15 +151,20 @@ const MembersList = () => {
     const handleBulkPDF = async () => {
         setIsGeneratingPDF(true);
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const selectedMembers = members.filter(m => selectedIds.includes(m.id));
+        const selectedMembers = members
+            .filter(m => selectedIds.includes(m.id))
+            .sort((a, b) => {
+                const idA = a.member_id || '';
+                const idB = b.member_id || '';
+                return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+            });
 
         for (let i = 0; i < selectedMembers.length; i++) {
             const member = selectedMembers[i];
             const element = document.getElementById(`print-card-${member.id}`);
             if (element) {
-                element.style.display = 'block';
                 const canvas = await html2canvas(element, { 
-                    scale: 3, 
+                    scale: 2, 
                     useCORS: true,
                     logging: false,
                     allowTaint: true,
@@ -167,7 +176,6 @@ const MembersList = () => {
 
                 if (i > 0) pdf.addPage();
                 pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
-                element.style.display = 'none';
             }
         }
 
@@ -188,7 +196,7 @@ const MembersList = () => {
 
     const handleLogout = async () => {
         try {
-            await adminAuth.signOut();
+            await auth.signOut();
             navigate('/pap/login');
         } catch (err) {
             console.error("Logout error:", err);
@@ -359,6 +367,7 @@ const MembersList = () => {
                                         <th className="px-6 py-5">CUSTOMER / MEMBER</th>
                                         <th className="px-6 py-5">CONTACT</th>
                                         <th className="px-6 py-5">LOCATION</th>
+                                        <th className="px-6 py-5">JOINED</th>
                                         <th className="px-6 py-5 text-right">ACTION</th>
                                     </tr>
                                 </thead>
@@ -381,9 +390,19 @@ const MembersList = () => {
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <span className="font-bold text-gray-900 gujarati text-base leading-tight">{m.main_member}</span>
-                                                        <span className="text-[10px] text-lalabapa-red font-black tracking-wider uppercase mt-0.5">
-                                                            {m.member_id || `ID: ${m.id.substring(0, 5).toUpperCase()}`}
-                                                        </span>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="text-[10px] text-lalabapa-red font-black tracking-wider uppercase">
+                                                                {m.member_id || `ID: ${m.id.substring(0, 5).toUpperCase()}`}
+                                                            </span>
+                                                            {m.other?.role && (
+                                                                <>
+                                                                    <span className="text-gray-300">•</span>
+                                                                    <span className="text-[9px] text-gray-500 font-bold gujarati uppercase tracking-widest bg-gray-100 px-1.5 py-0.5 rounded-md">
+                                                                        {m.other.role}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </td>
@@ -393,6 +412,21 @@ const MembersList = () => {
                                                     <span className="text-gray-900 font-bold gujarati text-sm line-clamp-1">{m.address?.society}</span>
                                                     <span className="text-[10px] text-gray-400 font-bold gujarati uppercase tracking-widest">{m.address?.area}</span>
                                                 </div>
+                                            </td>
+                                            <td className="px-6 py-5 text-[10px] font-mono leading-relaxed text-gray-500">
+                                                {m.createdAt?.toDate ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold">{m.createdAt.toDate().toLocaleDateString('en-GB')}</span>
+                                                        <span className="text-lalabapa-red">
+                                                            {m.createdAt.toDate().toLocaleTimeString('en-US', { 
+                                                                hour: '2-digit', 
+                                                                minute: '2-digit', 
+                                                                second: '2-digit', 
+                                                                hour12: true 
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                ) : '—'}
                                             </td>
                                             <td className="px-6 py-5 text-right">
                                                 <div className="flex items-center justify-end gap-2">
@@ -499,77 +533,99 @@ const MembersList = () => {
                 </AnimatePresence>
 
                 {/* Off-screen Template for PDF Printing */}
-                <div style={{ position: 'absolute', left: '-99999px', top: 0 }}>
-                    {members.filter(m => selectedIds.includes(m.id)).map(m => (
+                <div className="absolute top-[-9999px] left-[-9999px] z-[-9999] pointer-events-none" aria-hidden="true">
+                    {members
+                        .filter(m => selectedIds.includes(m.id))
+                        .sort((a, b) => {
+                            const idA = a.member_id || '';
+                            const idB = b.member_id || '';
+                            return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+                        })
+                        .map(m => (
                         <div 
                             key={`print-${m.id}`} 
                             id={`print-card-${m.id}`} 
-                            className="w-[210mm] p-12 relative overflow-hidden" 
-                            style={{ minHeight: '297mm', display: 'none', backgroundColor: '#ffffff', color: '#1a1a1a' }}
+                            className="font-inter w-[210mm] min-h-[297mm] p-[12mm] flex flex-col relative" 
+                            style={{ backgroundColor: '#ffffff' }}
                         >
-                            <header className="flex items-center gap-12 mb-12 pb-10" style={{ borderBottom: '2px solid #fff5f5' }}>
-                                <img src="/logo.png" className="w-24 h-24 object-contain" alt="logo" />
-                                <div className="flex-1">
-                                    <h1 className="gujarati text-5xl font-black leading-none mb-2" style={{ color: '#8B0000' }}>શ્રી લાલાબાપા સેવા સમિતિ</h1>
-                                    <p className="gujarati text-2xl font-bold uppercase tracking-[0.2em]" style={{ color: '#D4AF37' }}>Shree Lalabapa Seva Samiti</p>
-                                    <p className="text-[10px] font-black mt-4 flex items-center gap-2" style={{ color: '#9ca3af' }}>
-                                        Trust Reg. No.: A/5366/Ahmedabad <span style={{ color: '#D4AF37' }}>·</span> વાડજ, અમદાવાદ
-                                    </p>
+
+                            
+                            <header className="flex items-center justify-between mb-4 pb-3 border-b-4 border-lalabapa-red relative z-10 gap-4">
+                                <div className="flex items-center gap-6">
+                                    <img src="/logo.png" className="w-20 h-20 object-contain" alt="logo" />
+                                    <div>
+                                        <h1 className="gujarati text-xl font-black text-lalabapa-red leading-tight whitespace-nowrap">શ્રી લાલાબાપા સેવા સમિતિ - વાડજ, અમદાવાદ</h1>
+                                        <p className="gujarati text-[10px] font-bold text-lalabapa-gold-primary uppercase tracking-widest mt-1">Shri Lalabapa Seva Samiti - Vadaj, Ahmedabad</p>
+                                        <p className="gujarati text-[9px] font-black text-[#374151] mt-0.5">Trust Reg. No: A/5366/Ahmedabad</p>
+                                    </div>
+                                </div>
+                                <div className="text-right bg-red-50 border-2 border-lalabapa-red border-dashed rounded-xl p-3 min-w-[140px]">
+                                    <p className="text-[10px] font-black uppercase text-[#b96666] tracking-widest mb-0.5">Member ID</p>
+                                    <p className="text-lg font-black text-lalabapa-red">{m.member_id || `SLB-VDJ-${m.id.substring(0, 5).toUpperCase()}`}</p>
                                 </div>
                             </header>
-
-                            <div className="space-y-12">
-                                <div className="flex justify-between items-center pb-4" style={{ borderBottom: '1px solid #fff5f5' }}>
-                                    <h3 className="gujarati text-xs font-black uppercase tracking-widest" style={{ color: '#D4AF37' }}>સભ્યની સંપૂર્ણ વિગત (Member Details)</h3>
-                                    <span className="text-xl font-black" style={{ color: '#8B0000' }}>ID: {m.member_id || `LSS-${m.id.substring(0, 5).toUpperCase()}`}</span>
-                                </div>
-
-                                <div className="grid grid-cols-1 gap-10">
-                                    <div className="space-y-2">
-                                        <p className="gujarati text-sm font-bold" style={{ color: '#9ca3af' }}>મુખ્ય સભ્યનું નામ</p>
-                                        <p className="gujarati text-3xl font-black pl-6" style={{ color: '#111827', borderLeft: '4px solid #8B0000' }}>{m.main_member}</p>
+                            
+                            <div className="space-y-4 flex-1 relative z-10">
+                                {/* Member Details Grid */}
+                                <div className="border-2 border-[#f3e6e6] rounded-xl overflow-hidden">
+                                    {/* Name Row */}
+                                    <div className="bg-[#fcfafa] border-b-2 border-[#f3e6e6] p-4">
+                                        <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">સભ્યનું નામ (Member Full Name)</p>
+                                        <p className="gujarati text-2xl font-black text-[#111827]">{m.main_member}</p>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-x-20 gap-y-10">
-                                        <PrintDetail label="જન્મ તારીખ" value={m.other?.dob} />
-                                        <PrintDetail label="લિંગ (Gender)" value={m.other?.gender} />
-                                        <PrintDetail label="મોબાઇલ નંબર" value={m.contact?.mobile} />
-                                        <PrintDetail label="વોટ્સએપ" value={m.contact?.whatsapp} />
-                                        <PrintDetail label="મોબાઇલ ૨" value={m.contact?.mobile2 || '—'} />
-                                        <PrintDetail label="ઈમેઇલ" value={m.contact?.email || '—'} />
-                                        <PrintDetail label="હોદ્દો / ભૂમિકા" value={m.other?.role} isGujarati />
-                                        <PrintDetail label="વ્યવસાય (WORK)" value={`${m.occupation} : ${m.occupation_detail}`} isGujarati />
-                                        <PrintDetail label="કુટુંબની સંખ્યા" value={m.family_members_count} />
-                                        <PrintDetail label="જોડાવાની તારીખ" value={m.createdAt?.toDate ? m.createdAt.toDate().toLocaleDateString('gu-IN') : '—'} />
+                                    <div className="grid grid-cols-4 border-b-2 border-[#f3e6e6]">
+                                        <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="જન્મ તારીખ (DOB)" value={m.other?.dob ? m.other.dob.split('-').reverse().join('/') : '—'} /></div>
+                                        <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="લિંગ (Gender)" value={m.other?.gender} /></div>
+                                        <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="સમાજમાં ભૂમિકા (Society Role)" value={m.other?.role} isGujarati /></div>
+                                        <div className="p-3 col-span-1"><PrintItem label="પરિવાર સંખ્યા (Family)" value={m.family_members_count} /></div>
                                     </div>
 
-                                    <div className="pt-10" style={{ borderTop: '2px solid #fff5f5' }}>
-                                        <p className="gujarati text-[10px] font-black uppercase tracking-widest mb-6" style={{ color: '#D4AF37' }}>સરનામું (Address Information)</p>
-                                        <div className="grid grid-cols-2 gap-10">
-                                            <div className="space-y-4">
-                                                <PrintDetail label="ઘર અને સોસાયટી" value={`${m.address?.house_no}, ${m.address?.society}`} isGujarati />
-                                                <PrintDetail label="લેન્ડમાર્ક" value={m.address?.landmark || '—'} isGujarati />
-                                            </div>
-                                            <div className="space-y-4">
-                                                <PrintDetail label="વિસ્તાર" value={m.address?.area} isGujarati />
-                                                <PrintDetail label="ગામ/શહેર" value={m.address?.village_city === 'Other' ? m.address?.custom_village_city : m.address?.village_city} isGujarati />
-                                                <PrintDetail label="જિલ્લો (District)" value={m.address?.district} isGujarati />
-                                                <PrintDetail label="પીનકોડ" value={m.address?.pincode} />
-                                            </div>
-                                        </div>
+                                    <div className="grid grid-cols-4 border-b-2 border-[#f3e6e6]">
+                                        <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="મોબાઇલ ૧ (Mobile 1)" value={m.contact?.mobile} /></div>
+                                        <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="મોબાઇલ ૨ (Mobile 2)" value={m.contact?.mobile2} /></div>
+                                        <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="વોટ્સએપ (WhatsApp)" value={m.contact?.whatsapp} /></div>
+                                        <div className="p-3"><PrintItem label="ઈ-મેઈલ (Email)" value={m.contact?.email} /></div>
+                                    </div>
+
+                                    <div className="p-4 border-b-2 border-[#f3e6e6] bg-[#fcfafa]">
+                                        <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">સરનામું (Full Address)</p>
+                                        <p className="gujarati text-sm font-bold text-[#111827] leading-relaxed">
+                                            {[
+                                                m.address?.house_no,
+                                                m.address?.society,
+                                                m.address?.landmark,
+                                                m.address?.area === 'Other' ? m.address?.custom_area : m.address?.area,
+                                                m.address?.village_city === 'Other' ? m.address?.custom_village_city : m.address?.village_city,
+                                                m.address?.pincode
+                                            ].filter(p => p && p.toString().trim() !== '').join(', ') || '—'}
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2">
+                                        <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="વ્યવસાય (Occupation)" value={m.occupation} isGujarati /></div>
+                                        <div className="p-3"><PrintItem label="વ્યવસાય વિગત (Details)" value={m.occupation_detail} isGujarati /></div>
+                                    </div>
+                                    <div className="grid grid-cols-2 bg-[#fcfafa] border-t-2 border-[#f3e6e6]">
+                                        <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="સમયનું યોગદાન (Contribution)" value={m.time_contribution === 'Yes' ? 'હા (Yes)' : 'ના (No)'} isGujarati /></div>
+                                        <div className="p-3"><PrintItem label="સમાજ સેવા (Society Help)" value={m.help_society === 'Yes' ? 'હા (Yes)' : 'ના (No)'} isGujarati /></div>
+                                    </div>
+                                    <div className="p-4 bg-white border-t-2 border-[#f3e6e6]">
+                                        <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">ખાસ નોંધ (Special Notes)</p>
+                                        <p className="gujarati text-[13px] font-bold text-[#111827] leading-relaxed whitespace-pre-wrap">{m.other?.notes || '—'}</p>
                                     </div>
                                 </div>
                             </div>
-
-                            <footer className="absolute bottom-12 left-12 right-12 flex justify-between items-end">
-                                <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#d1d5db' }}>
-                                    Generated on {new Date().toLocaleDateString('gu-IN')}
+                            
+                            {/* System Footer */}
+                            <div className="mt-8 pt-6 border-t-[3px] border-dashed border-gray-300 flex justify-between items-end relative z-10">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Added On</p>
+                                    <p className="text-base font-bold text-gray-800 mt-1 bg-gray-100 px-3 py-1.5 rounded-lg inline-block">
+                                        {m.createdAt?.toDate ? `${m.createdAt.toDate().toLocaleDateString('en-GB')} at ${m.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}` : '—'}
+                                    </p>
                                 </div>
-                                <div className="text-right">
-                                    <div className="w-32 h-1 mb-2 opacity-10" style={{ backgroundColor: '#8B0000' }}></div>
-                                    <p className="gujarati text-[8px] font-bold" style={{ color: '#9ca3af' }}>Authentic Membership Record</p>
-                                </div>
-                            </footer>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -606,10 +662,10 @@ const NavItem = ({ to, active, icon, label }) => (
     </Link>
 );
 
-const PrintDetail = ({ label, value, isGujarati }) => (
-    <div className="space-y-1">
-        <p className="gujarati text-[10px] font-black uppercase tracking-widest" style={{ color: '#d1d5db' }}>{label}</p>
-        <p className={`${isGujarati ? 'gujarati' : ''} text-lg font-bold`} style={{ color: '#374151' }}>{value || '—'}</p>
+const PrintItem = ({ label, value, isGujarati }) => (
+    <div className="flex flex-col gap-0.5 w-full">
+        <label className="gujarati text-[9px] font-bold text-gray-500 uppercase tracking-widest leading-tight">{label}</label>
+        <span className={`${isGujarati ? 'gujarati text-[16px]' : 'text-[14px]'} font-extrabold text-[#111827] leading-tight break-words`}>{value || '—'}</span>
     </div>
 );
 

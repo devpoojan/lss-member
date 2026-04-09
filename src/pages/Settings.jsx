@@ -1,9 +1,11 @@
 import { auth, db } from '../lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { 
-  Users, LayoutGrid, Settings as SettingsIcon, LogOut, ChevronLeft, Save, Globe, Eye, Loader2
+  Users, LayoutGrid, Settings as SettingsIcon, LogOut, ChevronLeft, Save, Globe, Eye, Loader2,
+  Trash2, AlertTriangle
 } from 'lucide-react';
 
 const Settings = () => {
@@ -12,24 +14,34 @@ const Settings = () => {
     const [settings, setSettings] = useState({});
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isWiping, setIsWiping] = useState(false);
 
     useEffect(() => {
-        const fetchSettings = async () => {
-            setIsLoading(true);
-            try {
-                const settingsRef = doc(db, "system", "config");
-                const settingsSnap = await getDoc(settingsRef);
-                if (settingsSnap.exists()) {
-                    setSettings(settingsSnap.data());
-                }
-            } catch (err) {
-                console.error("Fetch settings error:", err);
-            } finally {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                fetchSettings();
+            } else {
                 setIsLoading(false);
             }
-        };
-        fetchSettings();
+        });
+        return () => unsubscribe();
     }, []);
+
+    const fetchSettings = async () => {
+        setIsLoading(true);
+        try {
+            const settingsRef = doc(db, "system", "config");
+            const settingsSnap = await getDoc(settingsRef);
+            if (settingsSnap.exists()) {
+                const data = settingsSnap.data();
+                setSettings(data);
+            }
+        } catch (err) {
+            console.error("Fetch settings error:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -51,6 +63,59 @@ const Settings = () => {
             navigate('/pap/login');
         } catch (err) {
             console.error("Logout error:", err);
+        }
+    };
+
+    const handleWipeDatabase = async () => {
+        const storedPassword = settings.wipePassword;
+
+        if (!storedPassword) {
+            alert("ભૂલ: વાઇપ પાસવર્ડ સેટ કરેલ નથી. કૃપા કરીને પહેલા સેટિંગ્સમાં પાસવર્ડ સેટ કરો. (Error: Wipe password not set. Please set a password in Settings first.)");
+            return;
+        }
+
+        // Password Verification - 3 Times
+        for (let i = 1; i <= 3; i++) {
+            const password = window.prompt(`[Verification ${i}/3] ડેટાબેઝ સાફ કરવા માટે પાસવર્ડ દાખલ કરો: (Enter password - Step ${i}/3)`);
+            if (password === null) return; // User cancelled
+            if (password !== storedPassword) {
+                alert("ખોટો પાસવર્ડ! પ્રક્રિયા રદ કરવામાં આવી છે. (Incorrect Password! Process cancelled.)");
+                return;
+            }
+        }
+
+        // Confirmation Verification - 3 Times
+        const confirmMessages = [
+            "શું તમે ખરેખર બધો ડેટા ડિલીટ કરવા માંગો છો? (Are you SURE you want to delete all data?)",
+            "આ ક્રિયા પાછી ખેંચી શકાશે નહીં. શું તમે ફાઇનલ કન્ફર્મ કરો છો? (This is IRREVERSIBLE. Do you confirm for the second time?)",
+            "લાસ્ટ વોર્નિંગ: તમામ સભ્ય ડેટા કાયમ માટે જતો રહેશે. શું તમે ખરેખર ફાઇનલ ડિલીટ કરવા માંગો છો? (LAST WARNING: ALL member data will be gone forever. Final deletion?)"
+        ];
+
+        for (let i = 0; i < 3; i++) {
+            const confirmed = window.confirm(confirmMessages[i]);
+            if (!confirmed) {
+                alert("પ્રક્રિયા રદ કરવામાં આવી છે. (Process cancelled.)");
+                return;
+            }
+        }
+
+        setIsWiping(true);
+        try {
+            const querySnapshot = await getDocs(collection(db, "members"));
+            const batch = writeBatch(db);
+            
+            querySnapshot.docs.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+            
+            await batch.commit();
+            alert("ડેટાબેઝ સફળતાપૂર્વક સાફ કરવામાં આવ્યો છે! (Database wiped successfully!)");
+            navigate('/pap');
+        } catch (err) {
+            console.error("Wipe error:", err);
+            alert("ભૂલ: ડેટાબેઝ સાફ કરી શકાયો નથી. (Error wiping database)");
+        } finally {
+            setIsWiping(false);
         }
     };
 
@@ -112,19 +177,28 @@ const Settings = () => {
                                             <p className="text-[10px] uppercase font-black text-gray-400 tracking-[0.2em] mt-1">Configure where the home button leads</p>
                                         </div>
                                     </div>
-                                    <div className="bg-white p-8 rounded-[2rem] border-2 border-gray-100 shadow-sm">
-                                        <div className="flex items-center gap-4 mb-4">
-                                            <div className="w-12 h-12 bg-gray-50 text-gray-400 rounded-2xl flex items-center justify-center">
-                                                <Globe className="w-6 h-6" />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-lg font-bold text-gray-900">Redirect Managed Externally</h3>
-                                                <p className="text-xs text-gray-400">The home page button redirect is now managed at the /backup route.</p>
-                                            </div>
+                                    <div className="bg-gray-50/50 p-8 rounded-[2rem] border-2 border-gray-100 space-y-4">
+                                        <input 
+                                            type="text" 
+                                            value={settings.surveyRedirectUrl || ''}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, surveyRedirectUrl: e.target.value }))}
+                                            placeholder="e.g. /join or https://google-form-link"
+                                            className="w-full px-6 py-5 bg-white border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-lalabapa-red outline-none transition-all placeholder:text-gray-200"
+                                        />
+                                        <div className="flex gap-3">
+                                            <button 
+                                                onClick={() => setSettings(p => ({...p, surveyRedirectUrl: '/join'}))}
+                                                className="px-4 py-2 rounded-xl border border-gray-200 text-[10px] font-black text-gray-400 uppercase hover:bg-white transition-all"
+                                            >
+                                                Internal Form
+                                            </button>
+                                            <button 
+                                                onClick={() => setSettings(p => ({...p, surveyRedirectUrl: ''}))}
+                                                className="px-4 py-2 rounded-xl border border-gray-200 text-[10px] font-black text-gray-400 uppercase hover:bg-white transition-all"
+                                            >
+                                                Clear URL
+                                            </button>
                                         </div>
-                                        <Link to="/backup" className="inline-flex items-center gap-2 text-lalabapa-red font-bold text-xs uppercase tracking-widest hover:underline mt-2">
-                                             Go to Redirect Control <ChevronLeft className="w-4 h-4 rotate-180" />
-                                        </Link>
                                     </div>
                                 </div>
 
@@ -139,22 +213,24 @@ const Settings = () => {
                                             <p className="text-[10px] uppercase font-black text-gray-400 tracking-[0.2em] mt-1">Show or hide the survey button on homepage</p>
                                         </div>
                                     </div>
-                                    <label className="flex items-center justify-between p-8 bg-gray-50/50 rounded-[2rem] border-2 border-gray-100 cursor-pointer group hover:border-lalabapa-gold-primary transition-all">
-                                        <div className="flex flex-col">
-                                            <span className="gujarati font-black text-lg text-gray-800">હોમ પેજ પર બટન બતાવો</span>
-                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Toggle Survey Availability</span>
-                                        </div>
-                                        <div className="relative">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={settings.showSurveyButton}
-                                                onChange={(e) => setSettings(prev => ({ ...prev, showSurveyButton: e.target.checked }))}
-                                                className="sr-only peer"
-                                            />
-                                            <div className="w-14 h-8 bg-gray-200 rounded-full peer peer-checked:bg-lalabapa-red transition-all"></div>
-                                            <div className="absolute top-1 left-1 bg-white w-6 h-6 rounded-full transition-all peer-checked:translate-x-6"></div>
-                                        </div>
-                                    </label>
+                                    <div className="space-y-4">
+                                        <label className="flex items-center justify-between p-8 bg-gray-50/50 rounded-[2rem] border-2 border-gray-100 cursor-pointer group hover:border-lalabapa-gold-primary transition-all">
+                                            <div className="flex flex-col">
+                                                <span className="gujarati font-black text-lg text-gray-800">હોમ પેજ પર બટન બતાવો</span>
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Toggle Survey Availability</span>
+                                            </div>
+                                            <div className="relative">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={settings.showSurveyButton}
+                                                    onChange={(e) => setSettings(prev => ({ ...prev, showSurveyButton: e.target.checked }))}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="w-14 h-8 bg-gray-200 rounded-full peer peer-checked:bg-lalabapa-red transition-all"></div>
+                                                <div className="absolute top-1 left-1 bg-white w-6 h-6 rounded-full transition-all peer-checked:translate-x-6"></div>
+                                            </div>
+                                        </label>
+                                    </div>
                                 </div>
 
                                 {/* Save Button */}
@@ -165,6 +241,32 @@ const Settings = () => {
                                 >
                                     {isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />} સેટિંગ્સ સાચવો (Save Configuration)
                                 </button>
+
+                                {/* Danger Zone */}
+                                <div className="pt-12 border-t-2 border-red-50 space-y-6">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center border border-red-100">
+                                            <AlertTriangle className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h3 className="gujarati text-xl font-black text-red-600 leading-tight">જોખમી વિસ્તાર (Danger Zone)</h3>
+                                            <p className="text-[10px] uppercase font-black text-gray-400 tracking-[0.2em] mt-1">Irreversible System Actions</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-red-50/30 p-8 rounded-[2rem] border-2 border-red-100/50 space-y-4">
+                                        <p className="gujarati text-sm font-bold text-red-700 leading-relaxed">
+                                            તમામ સભ્યોનો ડેટા સાફ કરવા માટે નીચેના બટનનો ઉપયોગ કરો. આ ક્રિયા પાછી ખેંચી શકાશે નહીં.
+                                            (Use the button below to wipe all member data. This action cannot be undone.)
+                                        </p>
+                                        <button 
+                                            onClick={handleWipeDatabase}
+                                            disabled={isWiping}
+                                            className="w-full py-5 bg-white border-2 border-red-200 text-red-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white hover:border-red-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                        >
+                                            {isWiping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} COMPLETE WIPE DATABASE
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

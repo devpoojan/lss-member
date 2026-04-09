@@ -12,6 +12,24 @@
   --color-lalabapa-gold-light: #FFD700;
   --color-lalabapa-gold-dark: #B8860B;
   --color-warm-white: #FDF5E6;
+
+  /* Override standard colors to HEX to prevent html2canvas oklch crash */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  
+  --color-red-50: #fef2f2;
+  --color-red-900: #7f1d1d;
+  
+  --color-white: #ffffff;
+  --color-black: #000000;
 }
 
 :root {
@@ -21,15 +39,20 @@
 }
 
 body {
-  @apply font-inter bg-warm-white text-[#1A1A1A] antialiased;
+  font-family: var(--font-inter);
+  background-color: var(--color-warm-white);
+  color: #1A1A1A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .premium-title {
-  @apply font-playfair tracking-wider;
+  font-family: var(--font-playfair);
+  letter-spacing: 0.05em;
 }
 
 .gujarati {
-  @apply font-anek;
+  font-family: var(--font-anek);
 }
 
 /* Custom Scrollbar for Premium Feel */
@@ -100,9 +123,15 @@ body {
 
 /* Glassmorphism Classes */
 .glass {
-  @apply bg-white/10 backdrop-blur-md border border-white/20 shadow-xl;
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 }
 
 .glass-red {
-  @apply bg-lalabapa-red/80 backdrop-blur-md border border-white/10 shadow-2xl;
+  background-color: rgba(139, 0, 0, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
 }

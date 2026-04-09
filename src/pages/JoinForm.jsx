@@ -1,12 +1,14 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../lib/firebase';
 import { collection, addDoc, query, where, getDocs, serverTimestamp, runTransaction, doc, getDoc } from 'firebase/firestore';
-import { ChevronRight, ChevronLeft, CheckCircle, AlertCircle, Loader2, Search, Check, User, Phone, MessageCircle, Info, MapPin, X } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle, AlertCircle, Loader2, Search, Check, User, Phone, MessageCircle, Info, MapPin, X, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 // --- Constants & Helpers ---
 
@@ -40,7 +42,7 @@ const AHMEDABAD_AREAS = [
 
 // Removed area codes logic as per simple global ID request
 
-const isEnglishName = (name) => /^[A-Za-z\s]+$/.test(name);
+const isEnglishName = (name) => /^[A-Za-z\s.]+$/.test(name);
 const normalizeArea = (area) => area.toLowerCase().replace(/nava/gi, "New").replace(/\s+/g, "");
 
 // --- Validation Schema ---
@@ -59,6 +61,8 @@ const joinSchema = z.object({
     }),
     occupation: z.string().min(1, 'વ્યવસાય પસંદ કરો'),
     occupation_detail: z.string().optional().or(z.literal('')),
+    time_contribution: z.string().optional(),
+    help_society: z.string().optional(),
     address: z.object({
         house_no: z.string().min(1, 'ઘર નંબર લખો'),
         society: z.string().min(1, 'સોસાયટી/એપાર્ટમેન્ટનું નામ લખો'),
@@ -90,6 +94,8 @@ const JoinForm = () => {
     const [areaSearch, setAreaSearch] = useState("");
     const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
     const [memberID, setMemberID] = useState("");
+    const [sameAsMobile, setSameAsMobile] = useState(false);
+    const submittingRef = useRef(false);
 
     const { register, handleSubmit, formState: { errors }, trigger, watch, setValue, getValues } = useForm({
         resolver: zodResolver(joinSchema),
@@ -105,6 +111,8 @@ const JoinForm = () => {
             },
             occupation: "વ્યવસાય",
             occupation_detail: "",
+            time_contribution: "",
+            help_society: "",
             address: {
                 house_no: "",
                 society: "",
@@ -133,6 +141,39 @@ const JoinForm = () => {
     const watchDistrict = watch("address.district");
     const watchCity = watch("address.village_city");
     const watchOccupation = watch("occupation");
+
+    const handleDownloadPDF = async (data, generatedID) => {
+        try {
+            // Wait slightly for the hidden template to be ready with the new ID
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const element = document.getElementById('pdf-template');
+            if (!element) return;
+
+            const canvas = await html2canvas(element, {
+                scale: 3,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`${data.main_member || 'Member'}_Registration.pdf`);
+        } catch (error) {
+            console.error("PDF generation error:", error);
+        }
+    };
+
+    // Sync WhatsApp with Mobile if "Same as Mobile" is checked
+    useEffect(() => {
+        if (sameAsMobile) {
+            setValue('contact.whatsapp', watchMobile || "");
+        }
+    }, [watchMobile, sameAsMobile, setValue]);
 
 
     const filteredAreas = useMemo(() => {
@@ -168,6 +209,8 @@ const JoinForm = () => {
     };
 
     const onSubmit = async (data) => {
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
 
@@ -188,7 +231,7 @@ const JoinForm = () => {
                 return newObj;
             };
 
-            let finalMemberID = "LSS-00000";
+            let finalMemberID = "SLB-VDJ-0000";
 
             // Simple Sequential ID Generation via Transaction
             await runTransaction(db, async (transaction) => {
@@ -201,7 +244,7 @@ const JoinForm = () => {
                 }
 
                 transaction.set(counterRef, { count: nextCount }, { merge: true });
-                finalMemberID = `LSS-${nextCount.toString().padStart(4, '0')}`;
+                finalMemberID = `SLB-VDJ-${nextCount.toString().padStart(4, '0')}`;
             });
 
             const docData = {
@@ -223,14 +266,33 @@ const JoinForm = () => {
             await addDoc(collection(db, "members"), docData);
             setMemberID(finalMemberID); // Store for success screen
             setIsSuccess(true);
+            
+            // Trigger automatic PDF download with current form data and new ID
+            handleDownloadPDF(data, finalMemberID);
         } catch (err) {
             console.error("Submission error:", err);
             setError("કંઈક ખોટું થયું છે. કૃપા કરીને ફરી પ્રયાસ કરો.");
         } finally {
+            submittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
+
+    const guardedSubmit = (e) => {
+        if (submittingRef.current) {
+            e.preventDefault();
+            return;
+        }
+        
+        if (currentStep < 4) {
+            e.preventDefault();
+            nextStep();
+            return;
+        }
+
+        handleSubmit(onSubmit)(e);
+    };
 
     return (
         <div className="min-h-screen bg-warm-white py-12 px-4 md:px-6">
@@ -259,14 +321,7 @@ const JoinForm = () => {
 
                 {/* Form Container */}
                 <form 
-                    onSubmit={(e) => {
-                        if (currentStep < 4) {
-                            e.preventDefault();
-                            nextStep();
-                        } else {
-                            handleSubmit(onSubmit)(e);
-                        }
-                    }} 
+                    onSubmit={guardedSubmit} 
                     className="bg-white rounded-3xl shadow-xl p-6 md:p-10 border border-lalabapa-gold-primary/20 relative overflow-hidden min-h-[400px] flex flex-col"
                 >
 
@@ -334,10 +389,35 @@ const JoinForm = () => {
                                         {errors.contact?.mobile && <p className="text-red-500 text-sm mt-1">{errors.contact.mobile.message}</p>}
                                     </div>
                                     <div className="form-group">
-                                        <label className="gujarati block text-gray-700 font-bold mb-2 text-lg">WHATSAPP NUMBER (વૈકલ્પિક)</label>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="gujarati block text-gray-700 font-bold text-lg">WHATSAPP NUMBER (વૈકલ્પિક)</label>
+                                            <label className="flex items-center gap-2 cursor-pointer group">
+                                                <div className="relative flex items-center">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={sameAsMobile}
+                                                        onChange={(e) => setSameAsMobile(e.target.checked)}
+                                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded border-2 border-green-500 transition-all checked:bg-green-500" 
+                                                    />
+                                                    <Check className="absolute w-4 h-4 text-white scale-0 transition-transform peer-checked:scale-75 pointer-events-none" />
+                                                </div>
+                                                <span className="gujarati text-xs font-bold text-gray-500 group-hover:text-green-600 transition-colors pt-0.5">મોબાઈલ નંબર 1 જેવો જ</span>
+                                            </label>
+                                        </div>
                                         <div className="relative">
                                             <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-green-400" />
-                                            <input {...register('contact.whatsapp')} className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-100 transition-all outline-none font-bold text-lg focus:border-lalabapa-gold-primary focus:ring-4 focus:ring-lalabapa-gold-primary/10" placeholder="વોટ્સએપ નંબર" />
+                                            <input 
+                                                {...register('contact.whatsapp')} 
+                                                readOnly={sameAsMobile}
+                                                onChange={(e) => {
+                                                    register('contact.whatsapp').onChange(e);
+                                                    if (sameAsMobile && e.target.value !== watchMobile) {
+                                                        setSameAsMobile(false);
+                                                    }
+                                                }}
+                                                className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all outline-none font-bold text-lg ${sameAsMobile ? 'bg-gray-50 border-green-100 text-gray-500 cursor-not-allowed' : 'border-gray-100 focus:border-lalabapa-gold-primary focus:ring-4 focus:ring-lalabapa-gold-primary/10'}`} 
+                                                placeholder={sameAsMobile ? watchMobile : "વોટ્સએપ નંબર"}
+                                            />
                                         </div>
                                         {errors.contact?.whatsapp && <p className="text-red-500 text-sm mt-1">{errors.contact.whatsapp.message}</p>}
                                     </div>
@@ -384,6 +464,40 @@ const JoinForm = () => {
                                                     placeholder={`દા.ત. ${watchOccupation === 'અભ્યાસ' ? 'કોલેજ (Computer Science)' : watchOccupation === 'ધંધો' ? 'અનાજનો ધંધો' : 'સિવિલ એન્જિનિયર'}`}
                                                 />
                                                 {errors.occupation_detail && <p className="text-red-500 text-xs font-bold">{errors.occupation_detail.message}</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="form-group md:col-span-2 pt-4 border-t border-gray-50">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-3">
+                                                <label className="gujarati block text-gray-800 font-bold mb-2 text-sm leading-relaxed">શું આપ જ્ઞાતિ અને સમાજના કલ્યાણ માટે સમયનું યોગદાન કરશો?</label>
+                                                <div className="flex gap-4">
+                                                    {['Yes', 'No'].map(opt => (
+                                                        <button 
+                                                            key={opt}
+                                                            type="button"
+                                                            onClick={() => setValue("time_contribution", opt)}
+                                                            className={`flex-1 py-3 rounded-xl font-bold transition-all border-2 ${watch("time_contribution") === opt ? 'bg-lalabapa-red text-white border-lalabapa-red shadow-md' : 'bg-white text-gray-500 border-gray-100 hover:border-lalabapa-gold-primary'}`}
+                                                        >
+                                                            {opt === 'Yes' ? 'હા (Yes)' : 'ના (No)'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="gujarati block text-gray-800 font-bold mb-2 text-sm leading-relaxed">સમાજને આગળ લાવવામાં આપ મદદરૂપ થશો?</label>
+                                                <div className="flex gap-4">
+                                                    {['Yes', 'No'].map(opt => (
+                                                        <button 
+                                                            key={opt}
+                                                            type="button"
+                                                            onClick={() => setValue("help_society", opt)}
+                                                            className={`flex-1 py-3 rounded-xl font-bold transition-all border-2 ${watch("help_society") === opt ? 'bg-lalabapa-red text-white border-lalabapa-red shadow-md' : 'bg-white text-gray-500 border-gray-100 hover:border-lalabapa-gold-primary'}`}
+                                                        >
+                                                            {opt === 'Yes' ? 'હા (Yes)' : 'ના (No)'}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -531,6 +645,8 @@ const JoinForm = () => {
                                             <ReviewItem label="મોબાઇલ ૨ (Mobile 2)" value={getValues('contact.mobile2') || '-'} />
                                             <ReviewItem label="ઈમેઇલ (Email)" value={getValues('contact.email') || '-'} />
                                             <ReviewItem label="વ્યવસાય (Work)" value={`${getValues('occupation')} : ${getValues('occupation_detail')}`} />
+                                            <ReviewItem label="સમયનું યોગદાન" value={getValues('time_contribution') === 'Yes' ? 'હા (Yes)' : getValues('time_contribution') === 'No' ? 'ના (No)' : '-'} />
+                                            <ReviewItem label="સમાજને મદદરૂપ" value={getValues('help_society') === 'Yes' ? 'હા (Yes)' : getValues('help_society') === 'No' ? 'ના (No)' : '-'} />
                                         </div>
                                     </div>
 
@@ -608,8 +724,15 @@ const JoinForm = () => {
                                     <h2 className="gujarati text-4xl font-black text-gray-900 leading-tight">ડેટા જમા થઈ ગયો છે!</h2>
                                     <p className="text-gray-400 text-sm uppercase font-bold tracking-widest italic">Submission Successful</p>
                                 </div>
-                                <div className="pt-8">
-                                    <Link to="/" className="inline-block px-10 py-4 bg-lalabapa-red text-white rounded-2xl font-bold hover:bg-lalabapa-red-dark transition-all shadow-lg hover:shadow-red-900/20 active:scale-95">
+                                <div className="pt-8 flex flex-col md:flex-row gap-4">
+                                    <button 
+                                        type="button"
+                                        onClick={() => handleDownloadPDF(getValues(), memberID)}
+                                        className="inline-flex items-center justify-center gap-2 px-10 py-4 bg-gray-900 text-white rounded-2xl font-bold hover:bg-black transition-all shadow-lg active:scale-95"
+                                    >
+                                        <Download className="w-5 h-5" /> પીડીએફ ડાઉનલોડ કરો
+                                    </button>
+                                    <Link to="/" className="inline-flex items-center justify-center px-10 py-4 bg-lalabapa-red text-white rounded-2xl font-bold hover:bg-lalabapa-red-dark transition-all shadow-lg hover:shadow-red-900/20 active:scale-95">
                                         મુખ્ય પૃષ્ઠ પર જાઓ
                                     </Link>
                                 </div>
@@ -738,6 +861,85 @@ const JoinForm = () => {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Hidden PDF Template for Auto-Download */}
+            <div className="absolute top-[-9999px] left-[-9999px] z-[-9999]" aria-hidden="true">
+                <div id="pdf-template" className="font-inter w-[210mm] min-h-[297mm] p-[15mm] flex flex-col relative" style={{ backgroundColor: '#ffffff' }}>
+                    <header className="flex items-center justify-between mb-4 pb-3 border-b-4 border-lalabapa-red relative z-10 gap-4 text-left">
+                        <div className="flex items-center gap-6 text-left">
+                            <img src="/logo.png" className="w-20 h-20 object-contain" alt="logo" />
+                            <div className="text-left">
+                                <h1 className="gujarati text-xl font-black text-lalabapa-red leading-tight whitespace-nowrap">શ્રી લાલાબાપા સેવા સમિતિ - વાડજ, અમદાવાદ</h1>
+                                <p className="gujarati text-[10px] font-bold text-lalabapa-gold-primary uppercase tracking-widest mt-1">Shri Lalabapa Seva Samiti - Vadaj, Ahmedabad</p>
+                                <p className="gujarati text-[9px] font-black text-[#374151] mt-0.5">Trust Reg. No: A/5366/Ahmedabad</p>
+                            </div>
+                        </div>
+                        <div className="text-right bg-red-50 border-2 border-lalabapa-red border-dashed rounded-xl p-3 min-w-[140px]">
+                            <p className="text-[10px] font-black uppercase text-[#b96666] tracking-widest mb-0.5">Member ID</p>
+                            <p className="text-lg font-black text-lalabapa-red">{memberID || 'GENERATING...'}</p>
+                        </div>
+                    </header>
+                    
+                    <div className="space-y-4 flex-1 relative z-10 text-left">
+                        <div className="border-2 border-[#f3e6e6] rounded-xl overflow-hidden">
+                            <div className="bg-[#fcfafa] border-b-2 border-[#f3e6e6] p-4">
+                                <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">સભ્યનું નામ (Member Full Name)</p>
+                                <p className="gujarati text-2xl font-black text-[#111827]">{getValues('main_member')}</p>
+                            </div>
+
+                            <div className="grid grid-cols-4 border-b-2 border-[#f3e6e6]">
+                                <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="જન્મ તારીખ (DOB)" value={getValues('other.dob') ? getValues('other.dob').split('-').reverse().join('/') : '—'} /></div>
+                                <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="લિંગ (Gender)" value={getValues('other.gender')} /></div>
+                                <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="સમાજમાં ભૂમિકા (Society Role)" value={getValues('other.role')} isGujarati /></div>
+                                <div className="p-3 col-span-1"><PrintItem label="પરિવાર સંખ્યા (Family)" value={getValues('family_members_count')} /></div>
+                            </div>
+
+                            <div className="grid grid-cols-4 border-b-2 border-[#f3e6e6]">
+                                <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="મોબાઇલ ૧ (Mobile 1)" value={getValues('contact.mobile')} /></div>
+                                <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="મોબાઇલ ૨ (Mobile 2)" value={getValues('contact.mobile2')} /></div>
+                                <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="વોટ્સએપ (WhatsApp)" value={getValues('contact.whatsapp')} /></div>
+                                <div className="p-3"><PrintItem label="ઈ-મેઈલ (Email)" value={getValues('contact.email')} /></div>
+                            </div>
+
+                            <div className="p-4 border-b-2 border-[#f3e6e6] bg-[#fcfafa]">
+                                <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">સરનામું (Full Address)</p>
+                                <p className="gujarati text-sm font-bold text-[#111827] leading-relaxed">
+                                    {[
+                                        getValues('address.house_no'),
+                                        getValues('address.society'),
+                                        getValues('address.landmark'),
+                                        getValues('address.area') === 'Other' ? getValues('address.custom_area') : getValues('address.area'),
+                                        getValues('address.village_city') === 'Other' ? getValues('address.custom_village_city') : getValues('address.village_city'),
+                                        getValues('address.pincode')
+                                    ].filter(p => p && p.toString().trim() !== '').join(', ') || '—'}
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-2">
+                                <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="વ્યવસાય (Occupation)" value={getValues('occupation')} isGujarati /></div>
+                                <div className="p-3"><PrintItem label="વ્યવસાય વિગત (Details)" value={getValues('occupation_detail')} isGujarati /></div>
+                            </div>
+                            <div className="grid grid-cols-2 bg-[#fcfafa] border-t-2 border-[#f3e6e6]">
+                                <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="સમયનું યોગદાન (Contribution)" value={getValues('time_contribution') === 'Yes' ? 'હા (Yes)' : 'ના (No)'} isGujarati /></div>
+                                <div className="p-3"><PrintItem label="સમાજ સેવા (Society Help)" value={getValues('help_society') === 'Yes' ? 'હા (Yes)' : 'ના (No)'} isGujarati /></div>
+                            </div>
+                            <div className="p-4 bg-white border-t-2 border-[#f3e6e6]">
+                                <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">ખાસ નોંધ (Special Notes)</p>
+                                <p className="gujarati text-[13px] font-bold text-[#111827] leading-relaxed whitespace-pre-wrap">{getValues('other.notes') || '—'}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-8 pt-6 border-t-[3px] border-dashed border-gray-300 flex justify-between items-end relative z-10">
+                        <div>
+                            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Registration Date</p>
+                            <p className="text-base font-bold text-gray-800 mt-1 bg-gray-100 px-3 py-1.5 rounded-lg inline-block text-left">
+                                {new Date().toLocaleDateString('en-GB')} at {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -746,6 +948,13 @@ const ReviewItem = ({ label, value }) => (
     <div className="flex justify-between items-baseline border-b border-gray-100 pb-2">
         <span className="gujarati text-xs text-gray-400 font-bold uppercase tracking-wider">{label}</span>
         <span className="gujarati text-base font-bold text-gray-800 text-right">{value}</span>
+    </div>
+);
+
+const PrintItem = ({ label, value, isGujarati }) => (
+    <div className="flex flex-col gap-0.5 w-full text-left">
+        <label className="gujarati text-[9px] font-bold text-gray-500 uppercase tracking-widest leading-tight">{label}</label>
+        <span className={`${isGujarati ? 'gujarati text-[16px]' : 'text-[14px]'} font-extrabold text-[#111827] leading-tight break-words`}>{value || '—'}</span>
     </div>
 );
 

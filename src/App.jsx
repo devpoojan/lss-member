@@ -10,7 +10,6 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const MembersList = lazy(() => import('./pages/MembersList'));
 const MemberDetail = lazy(() => import('./pages/MemberDetail'));
 const Settings = lazy(() => import('./pages/Settings'));
-const BackupRedirect = lazy(() => import('./pages/BackupRedirect'));
 
 // Basic Loading Component
 const LoadingUI = () => (
@@ -35,9 +34,6 @@ function App() {
           <Route path="/pap/members" element={<PrivateRoute><MembersList /></PrivateRoute>} />
           <Route path="/pap/members/:id" element={<PrivateRoute><MemberDetail /></PrivateRoute>} />
           <Route path="/pap/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-          
-          {/* Internal/Backup Control */}
-          <Route path="/backup" element={<BackupRedirect />} />
           
           {/* 404 Redirect or Not Found */}
           <Route path="*" element={<div className="p-10 text-center">404 - Not Found</div>} />

@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { db, auth } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { 
   ChevronLeft, Star, Edit, Trash, MessageCircle, 
-  Printer, X, Check, User, Phone, MapPin, 
+  Printer, Download, X, Check, User, Phone, MapPin, 
   Notebook, Mail, Users, Flag, Info, LayoutGrid, PlusCircle, Settings as SettingsIcon, LogOut, Loader2
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const AHMEDABAD_AREAS = [
     "Other", "Acher", "Adalaj", "Ambawadi", "Ambli", "Ambli Bopal", "Amraiwadi", "Asarwa", "Aslali",
@@ -65,36 +68,43 @@ const MemberDetail = () => {
     };
 
     useEffect(() => {
-        const fetchMember = async () => {
-            try {
-                const memberRef = doc(db, "members", id);
-                const memberSnap = await getDoc(memberRef);
-                
-                if (memberSnap.exists()) {
-                    setMember(memberSnap.data());
-                    setFormData(memberSnap.data());
-                }
-
-                // Family history listener
-                const familyQuery = query(
-                    collection(db, "members", id, "history"),
-                    orderBy("createdAt", "desc")
-                );
-                
-                const unsubscribe = onSnapshot(familyQuery, (snapshot) => {
-                    setNotes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                });
-
-                setLoading(false);
-                return () => unsubscribe();
-            } catch (err) {
-                console.error("Error fetching member:", err);
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                fetchMember();
+            } else {
                 setLoading(false);
             }
-        };
-
-        fetchMember();
+        });
+        return () => unsubscribe();
     }, [id]);
+
+    const fetchMember = async () => {
+        try {
+            const memberRef = doc(db, "members", id);
+            const memberSnap = await getDoc(memberRef);
+            
+            if (memberSnap.exists()) {
+                setMember(memberSnap.data());
+                setFormData(memberSnap.data());
+            }
+
+            // Family history listener
+            const familyQuery = query(
+                collection(db, "members", id, "history"),
+                orderBy("createdAt", "desc")
+            );
+            
+            const unsubscribeHistory = onSnapshot(familyQuery, (snapshot) => {
+                setNotes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            });
+
+            setLoading(false);
+            return unsubscribeHistory;
+        } catch (err) {
+            console.error("Error fetching member:", err);
+            setLoading(false);
+        }
+    };
 
     const toggleImportant = async () => {
         const docRef = doc(db, "members", id);
@@ -158,6 +168,36 @@ const MemberDetail = () => {
         }
     };
 
+    const handleDownloadPDF = async () => {
+        setIsSaving(true);
+        try {
+            const element = document.getElementById('pdf-template');
+            
+            // Generate canvas with exact A4 dimensions at high scaling for crisp text
+            const canvas = await html2canvas(element, {
+                scale: 2, 
+                useCORS: true, 
+                logging: false, 
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            
+            // A4 dimensions in mm: 210 x 297
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`${member?.main_member || 'Member'}_${member?.member_id || member?.id?.substring(0,5)}.pdf`);
+        } catch (error) {
+            console.error("PDF generation error:", error);
+            alert("Error downloading PDF.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handleWhatsApp = () => {
         window.open(`https://wa.me/91${member?.contact?.whatsapp || member?.contact?.mobile}`, '_blank');
     };
@@ -209,7 +249,7 @@ const MemberDetail = () => {
                                 {member.isImportant && <Star className="w-5 h-5 fill-amber-500 text-amber-500" />}
                             </h1>
                             <p className="text-lalabapa-red text-[10px] uppercase font-black tracking-widest mt-0.5">
-                                MEMBER ID: {member.member_id || `LSS-${member.id.substring(0, 5).toUpperCase()}`}
+                                MEMBER ID: {member.member_id || `SLB-VDJ-${member.id.substring(0, 5).toUpperCase()}`}
                             </p>
                         </div>
                     </div>
@@ -248,6 +288,13 @@ const MemberDetail = () => {
                         >
                             <Trash className="w-5 h-5" />
                         </button>
+                        <button 
+                            onClick={handleDownloadPDF}
+                            disabled={isSaving}
+                            className="flex-shrink-0 flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-lg disabled:opacity-50"
+                        >
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download PDF
+                        </button>
                     </div>
                 </header>
 
@@ -260,7 +307,18 @@ const MemberDetail = () => {
                                     <DetailField label="FULL NAME (નામ)" value={formData.main_member} isEditing={isEditing} onChange={(v) => updateNestedField('main_member', v.toUpperCase())} isGujarati />
                                     <DetailField label="MEMBER ID" value={formData.member_id} isEditing={isEditing} onChange={(v) => updateNestedField('member_id', v.toUpperCase())} />
                                     <DetailField label="FAMILY MEMBERS" value={formData.family_members_count} isEditing={isEditing} onChange={(v) => updateNestedField('family_members_count', Number(v))} type="number" />
-                                    <DetailField label="JOINED DATE" value={member.createdAt?.toDate().toLocaleDateString('gu-IN')} disabled />
+                                    <DetailField 
+                                        label="JOINED DATE" 
+                                        value={member.createdAt?.toDate ? (
+                                            `${member.createdAt.toDate().toLocaleDateString('en-GB')}, ${member.createdAt.toDate().toLocaleTimeString('en-US', { 
+                                                hour: '2-digit', 
+                                                minute: '2-digit', 
+                                                second: '2-digit', 
+                                                hour12: true 
+                                            })}`
+                                        ) : '—'} 
+                                        disabled 
+                                    />
                                 </div>
                             </div>
 
@@ -317,12 +375,28 @@ const MemberDetail = () => {
                             {/* Full Address */}
                             <div className="bg-white border-2 border-gray-100 rounded-[2.5rem] p-8 md:p-10 space-y-8 shadow-sm">
                                 <SectionHeader title="FULL ADDRESS" icon={<MapPin className="w-4 h-4" />} />
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <DetailField label="HOUSE NO." value={formData?.address?.house_no} isEditing={isEditing} onChange={(v) => updateNestedField('address.house_no', v.toUpperCase())} />
-                                    <DetailField label="SOCIETY" value={formData?.address?.society} isEditing={isEditing} onChange={(v) => updateNestedField('address.society', v.toUpperCase())} />
-                                    <DetailField label="LANDMARK" value={formData?.address?.landmark} isEditing={isEditing} onChange={(v) => updateNestedField('address.landmark', v.toUpperCase())} />
-                                    <DetailField label="PIN CODE" value={formData?.address?.pincode} isEditing={isEditing} onChange={(v) => updateNestedField('address.pincode', v)} />
-                                </div>
+                                {!isEditing ? (
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] uppercase font-black text-gray-400 tracking-widest leading-none">COMPLETE ADDRESS</p>
+                                        <p className="gujarati text-xl font-bold text-gray-800 leading-relaxed">
+                                            {[
+                                                formData?.address?.house_no,
+                                                formData?.address?.society,
+                                                formData?.address?.landmark,
+                                                formData?.address?.area === 'Other' ? formData?.address?.custom_area : formData?.address?.area,
+                                                formData?.address?.village_city === 'Other' ? formData?.address?.custom_village_city : formData?.address?.village_city,
+                                                formData?.address?.pincode
+                                            ].filter(p => p && p.toString().trim() !== '').join(', ') || '—'}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <DetailField label="HOUSE NO." value={formData?.address?.house_no} isEditing={isEditing} onChange={(v) => updateNestedField('address.house_no', v.toUpperCase())} />
+                                        <DetailField label="SOCIETY" value={formData?.address?.society} isEditing={isEditing} onChange={(v) => updateNestedField('address.society', v.toUpperCase())} />
+                                        <DetailField label="LANDMARK" value={formData?.address?.landmark} isEditing={isEditing} onChange={(v) => updateNestedField('address.landmark', v.toUpperCase())} />
+                                        <DetailField label="PIN CODE" value={formData?.address?.pincode} isEditing={isEditing} onChange={(v) => updateNestedField('address.pincode', v)} />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Official Details */}
@@ -331,7 +405,7 @@ const MemberDetail = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                     <DetailField label="GENDER" value={formData?.other?.gender} isEditing={isEditing} onChange={(v) => updateNestedField('other.gender', v)} type="select" options={['Male', 'Female', 'Other']} />
                                     <DetailField label="DOB" value={formData?.other?.dob} isEditing={isEditing} onChange={(v) => updateNestedField('other.dob', v)} type="date" />
-                                    <DetailField label="ROLE" value={formData?.other?.role} isEditing={isEditing} onChange={(v) => updateNestedField('other.role', v.toUpperCase())} />
+                                    <DetailField label="SOCIETY ROLE" value={formData?.other?.role} isEditing={isEditing} onChange={(v) => updateNestedField('other.role', v.toUpperCase())} />
                                     <DetailField 
                                         label="OCCUPATION" 
                                         value={formData?.occupation} 
@@ -346,7 +420,32 @@ const MemberDetail = () => {
                                         isEditing={isEditing} 
                                         onChange={(v) => updateNestedField('occupation_detail', v)} 
                                     />
+                                    <DetailField 
+                                        label="TIME CONTRIBUTION" 
+                                        value={formData?.time_contribution} 
+                                        isEditing={isEditing} 
+                                        onChange={(v) => updateNestedField('time_contribution', v)} 
+                                        type="select" 
+                                        options={['Yes', 'No']} 
+                                    />
+                                    <DetailField 
+                                        label="HELP SOCIETY" 
+                                        value={formData?.help_society} 
+                                        isEditing={isEditing} 
+                                        onChange={(v) => updateNestedField('help_society', v)} 
+                                        type="select" 
+                                        options={['Yes', 'No']} 
+                                    />
                                     <DetailField label="CONSENT" value={formData?.consent ? "GIVEN" : "NOT GIVEN"} disabled />
+                                    <div className="md:col-span-2 lg:col-span-3 pt-4 border-t border-gray-50 mt-4">
+                                        <DetailField 
+                                            label="USER NOTES (FROM REGISTRATION)" 
+                                            value={formData?.other?.notes} 
+                                            isEditing={isEditing} 
+                                            onChange={(v) => updateNestedField('other.notes', v)} 
+                                            type="textarea"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -385,34 +484,84 @@ const MemberDetail = () => {
                     </div>
                 </div>
 
-                {/* Print Template */}
-                <div className="print-only p-12 bg-white min-h-screen">
-                     <header className="flex items-center gap-10 mb-10 pb-8 border-b border-gray-100">
-                        <img src="/logo.png" className="w-20 h-20" alt="logo" />
-                        <div className="flex-1">
-                            <h1 className="gujarati text-4xl font-black text-gray-900 leading-none">શ્રી લાલાબાપા સેવા સમિતિ</h1>
-                            <p className="gujarati text-xl font-bold text-lalabapa-red mt-2 uppercase tracking-wider">Shree Lalabapa Seva Samiti</p>
-                        </div>
-                    </header>
-                    <div className="space-y-12">
-                         <div className="flex justify-between items-end border-b-2 border-gray-50 pb-4">
-                            <h2 className="gujarati text-xs font-black uppercase tracking-widest text-gray-300 text-lalabapa-gold-primary">સભ્યની માહિતી (Member Record)</h2>
-                            <span className="text-xl font-black text-gray-900">ID: {member.member_id || `LSS-${member.id.substring(0, 5).toUpperCase()}`}</span>
-                        </div>
-                        <div className="grid grid-cols-1 gap-12">
-                            <div className="space-y-2">
-                                <p className="gujarati text-sm font-bold text-gray-400">મુખ્ય સભ્યનું નામ</p>
-                                <p className="gujarati text-4xl font-black text-gray-900">{formData.main_member}</p>
+                <div className="absolute top-[-9999px] left-[-9999px] z-[-9999]" aria-hidden="true">
+                    <div id="pdf-template" className="font-inter w-[210mm] min-h-[297mm] p-[12mm] flex flex-col relative" style={{ backgroundColor: '#ffffff' }}>
+
+                        
+                        <header className="flex items-center justify-between mb-4 pb-3 border-b-4 border-lalabapa-red relative z-10 gap-4">
+                                <div className="flex items-center gap-6">
+                                    <img src="/logo.png" className="w-20 h-20 object-contain" alt="logo" />
+                                    <div>
+                                        <h1 className="gujarati text-xl font-black text-lalabapa-red leading-tight whitespace-nowrap">શ્રી લાલાબાપા સેવા સમિતિ - વાડજ, અમદાવાદ</h1>
+                                        <p className="gujarati text-[10px] font-bold text-lalabapa-gold-primary uppercase tracking-widest mt-1">Shri Lalabapa Seva Samiti - Vadaj, Ahmedabad</p>
+                                        <p className="gujarati text-[9px] font-black text-[#374151] mt-0.5">Trust Reg. No: A/5366/Ahmedabad</p>
+                                    </div>
+                                </div>
+                            <div className="text-right bg-red-50 border-2 border-lalabapa-red border-dashed rounded-xl p-3 min-w-[140px]">
+                                <p className="text-[10px] font-black uppercase text-[#b96666] tracking-widest mb-0.5">Member ID</p>
+                                <p className="text-lg font-black text-lalabapa-red">{member.member_id || `SLB-VDJ-${member.id.substring(0, 5).toUpperCase()}`}</p>
                             </div>
-                            <div className="grid grid-cols-2 gap-10">
-                                <PrintItem label="જન્મ તારીખ" value={formatDateDisplay(formData?.other?.dob)} />
-                                <PrintItem label="લિંગ" value={formData?.other?.gender} />
-                                <PrintItem label="મોબાઇલ નંબર" value={formData?.contact?.mobile} />
-                                <PrintItem label="વોટ્સએપ" value={formData?.contact?.whatsapp} />
-                                <PrintItem label="સોસાયટી" value={formData?.address?.society} isGujarati />
-                                <PrintItem label="વિસ્તાર" value={formData?.address?.area} isGujarati />
-                                <PrintItem label="વ્યવસાય" value={formData?.occupation} isGujarati />
-                                <PrintItem label="સભ્યોની સંખ્યા" value={formData.family_members_count} />
+                        </header>
+                        
+                        <div className="space-y-4 flex-1 relative z-10">
+                            {/* Member Details Grid */}
+                            <div className="border-2 border-[#f3e6e6] rounded-xl overflow-hidden">
+                                {/* Name Row */}
+                                <div className="bg-[#fcfafa] border-b-2 border-[#f3e6e6] p-4">
+                                    <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">સભ્યનું નામ (Member Full Name)</p>
+                                    <p className="gujarati text-2xl font-black text-[#111827]">{formData.main_member}</p>
+                                </div>
+
+                                <div className="grid grid-cols-4 border-b-2 border-[#f3e6e6]">
+                                    <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="જન્મ તારીખ (DOB)" value={formData?.other?.dob ? formData.other.dob.split('-').reverse().join('/') : '—'} /></div>
+                                    <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="લિંગ (Gender)" value={formData?.other?.gender} /></div>
+                                    <div className="p-3 border-r-2 border-[#f3e6e6] col-span-1"><PrintItem label="સમાજમાં ભૂમિકા (Society Role)" value={formData?.other?.role} isGujarati /></div>
+                                    <div className="p-3 col-span-1"><PrintItem label="પરિવાર સંખ્યા (Family)" value={formData.family_members_count} /></div>
+                                </div>
+
+                                <div className="grid grid-cols-4 border-b-2 border-[#f3e6e6]">
+                                    <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="મોબાઇલ ૧ (Mobile 1)" value={formData?.contact?.mobile} /></div>
+                                    <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="મોબાઇલ ૨ (Mobile 2)" value={formData?.contact?.mobile2} /></div>
+                                    <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="વોટ્સએપ (WhatsApp)" value={formData?.contact?.whatsapp} /></div>
+                                    <div className="p-3"><PrintItem label="ઈ-મેઈલ (Email)" value={formData?.contact?.email} /></div>
+                                </div>
+
+                                <div className="p-4 border-b-2 border-[#f3e6e6] bg-[#fcfafa]">
+                                    <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">સરનામું (Full Address)</p>
+                                    <p className="gujarati text-sm font-bold text-[#111827] leading-relaxed">
+                                        {[
+                                            formData?.address?.house_no,
+                                            formData?.address?.society,
+                                            formData?.address?.landmark,
+                                            formData?.address?.area === 'Other' ? formData?.address?.custom_area : formData?.address?.area,
+                                            formData?.address?.village_city === 'Other' ? formData?.address?.custom_village_city : formData?.address?.village_city,
+                                            formData?.address?.pincode
+                                        ].filter(p => p && p.toString().trim() !== '').join(', ') || '—'}
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2">
+                                    <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="વ્યવસાય (Occupation)" value={formData?.occupation} isGujarati /></div>
+                                    <div className="p-3"><PrintItem label="વ્યવસાય વિગત (Details)" value={formData?.occupation_detail} isGujarati /></div>
+                                </div>
+                                <div className="grid grid-cols-2 bg-[#fcfafa] border-t-2 border-[#f3e6e6]">
+                                    <div className="p-3 border-r-2 border-[#f3e6e6]"><PrintItem label="સમયનું યોગદાન (Contribution)" value={formData?.time_contribution === 'Yes' ? 'હા (Yes)' : 'ના (No)'} isGujarati /></div>
+                                    <div className="p-3"><PrintItem label="સમાજ સેવા (Society Help)" value={formData?.help_society === 'Yes' ? 'હા (Yes)' : 'ના (No)'} isGujarati /></div>
+                                </div>
+                                <div className="p-4 bg-white border-t-2 border-[#f3e6e6]">
+                                    <p className="gujarati text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">ખાસ નોંધ (Special Notes)</p>
+                                    <p className="gujarati text-[13px] font-bold text-[#111827] leading-relaxed whitespace-pre-wrap">{formData?.other?.notes || '—'}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* System Footer */}
+                        <div className="mt-8 pt-6 border-t-[3px] border-dashed border-gray-300 flex justify-between items-end relative z-10">
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Added On</p>
+                                <p className="text-base font-bold text-gray-800 mt-1 bg-gray-100 px-3 py-1.5 rounded-lg inline-block">
+                                    {member.createdAt?.toDate ? `${member.createdAt.toDate().toLocaleDateString('en-GB')} at ${member.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}` : '—'}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -473,6 +622,14 @@ const DetailField = ({ label, value, isEditing, onChange, type = "text", options
                     <option value="">SELECT...</option>
                     {options.map(opt => <option key={opt} value={opt}>{opt.toUpperCase()}</option>)}
                 </select>
+            ) : type === "textarea" ? (
+                <textarea
+                    value={value || ""}
+                    onChange={(e) => onChange(e.target.value)}
+                    rows={4}
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-50 rounded-2xl text-sm font-bold focus:bg-white focus:border-lalabapa-red outline-none transition-all resize-none"
+                    placeholder="ENTER NOTES..."
+                />
             ) : (
                 <input
                     type={type}
@@ -486,9 +643,9 @@ const DetailField = ({ label, value, isEditing, onChange, type = "text", options
 );
 
 const PrintItem = ({ label, value, isGujarati }) => (
-    <div className="flex flex-col gap-1">
-        <label className="gujarati text-[9px] font-black text-gray-400 uppercase tracking-widest">{label}</label>
-        <span className={`${isGujarati ? 'gujarati text-lg' : 'text-base'} font-black text-black`}>{value || '—'}</span>
+    <div className="flex flex-col gap-0.5 w-full">
+        <label className="gujarati text-[9px] font-bold text-gray-500 uppercase tracking-widest leading-tight">{label}</label>
+        <span className={`${isGujarati ? 'gujarati text-[16px]' : 'text-[14px]'} font-extrabold text-[#111827] leading-tight break-words`}>{value || '—'}</span>
     </div>
 );
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, getDocs, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import { 
   Users, Settings as SettingsIcon, LogOut, ChevronRight, LayoutGrid
@@ -18,56 +19,59 @@ const AdminDashboard = () => {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const fetchDashboardData = async () => {
-            setIsLoading(true);
-            try {
-                // Get all members for stats
-                const membersQuery = query(collection(db, "members"));
-                const querySnapshot = await getDocs(membersQuery);
-                const allMembers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                // Get configuration
-                const settingsRef = doc(db, "system", "config");
-                const settingsSnap = await getDoc(settingsRef);
-                const activeMembers = allMembers.filter(m => m.isActive !== false);
-                
-                // 1. Total Members & Families
-                const totalMembersCount = activeMembers.reduce((sum, data) => sum + (Number(data.family_members_count) || 1), 0);
-                const familiesCount = activeMembers.length;
-                
-                // 2. Today's Entries (among active members)
-                const startOfToday = new Date();
-                startOfToday.setHours(0, 0, 0, 0);
-                const todayEntries = activeMembers.filter(m => {
-                    const createdAt = m.createdAt?.toDate?.() || new Date(0);
-                    return createdAt >= startOfToday;
-                });
-
-                // Get recent entries
-                const recentQuery = query(
-                    collection(db, "members"),
-                    orderBy("createdAt", "desc"),
-                    limit(5)
-                );
-                const recentSnapshot = await getDocs(recentQuery);
-                const recentList = recentSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                
-                setStats({
-                    total: totalMembersCount,
-                    today: todayEntries.length,
-                    families: familiesCount
-                });
-
-                setRecentMembers(recentList);
-            } catch (err) {
-                console.error("Dashboard error:", err);
-            } finally {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                fetchDashboardData();
+            } else {
                 setIsLoading(false);
             }
-        };
-
-        fetchDashboardData();
+        });
+        return () => unsubscribe();
     }, []);
+
+    const fetchDashboardData = async () => {
+        setIsLoading(true);
+        try {
+            // Get all members for stats
+            const membersQuery = query(collection(db, "members"));
+            const querySnapshot = await getDocs(membersQuery);
+            const allMembers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // 1. Total Members & Families
+            const activeMembers = allMembers.filter(m => m.isActive !== false);
+            const totalMembersCount = activeMembers.reduce((sum, data) => sum + (Number(data.family_members_count) || 1), 0);
+            const familiesCount = activeMembers.length;
+            
+            // 2. Today's Entries (among active members)
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const todayEntries = activeMembers.filter(m => {
+                const createdAt = m.createdAt?.toDate?.() || new Date(0);
+                return createdAt >= startOfToday;
+            });
+
+            // Get recent entries
+            const recentQuery = query(
+                collection(db, "members"),
+                orderBy("createdAt", "desc"),
+                limit(5)
+            );
+            const recentSnapshot = await getDocs(recentQuery);
+            const recentList = recentSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            setStats({
+                total: totalMembersCount,
+                today: todayEntries.length,
+                families: familiesCount
+            });
+
+            setRecentMembers(recentList);
+        } catch (err) {
+            console.error("Dashboard error:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
 
     const handleLogout = async () => {
@@ -151,7 +155,21 @@ const AdminDashboard = () => {
                                             </td>
                                             <td className="px-8 py-5 text-gray-500 text-sm">{member.contact?.mobile}</td>
                                             <td className="px-8 py-5 text-gray-500 gujarati text-sm">{member.address?.area || '—'}</td>
-                                            <td className="px-8 py-5 text-gray-500 text-xs font-mono">{member.createdAt?.toDate ? member.createdAt.toDate().toLocaleDateString('gu-IN') : '—'}</td>
+                                            <td className="px-8 py-5 text-gray-500 text-[10px] font-mono leading-relaxed">
+                                                {member.createdAt?.toDate ? (
+                                                    <div className="flex flex-col">
+                                                        <span>{member.createdAt.toDate().toLocaleDateString('en-GB')}</span>
+                                                        <span className="text-lalabapa-red font-bold">
+                                                            {member.createdAt.toDate().toLocaleTimeString('en-US', { 
+                                                                hour: '2-digit', 
+                                                                minute: '2-digit', 
+                                                                second: '2-digit', 
+                                                                hour12: true 
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                ) : '—'}
+                                            </td>
                                             <td className="px-8 py-5 text-right">
                                                 <ChevronRight className="w-4 h-4 text-gray-300 ml-auto" />
                                             </td>
